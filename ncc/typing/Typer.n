@@ -134,6 +134,8 @@ namespace Nemerle.Compiler
     locals_stack : Stack [LocalContext];
     [Accessor]
     current_method_builder : MethodBuilder;
+    
+    public mutable StopAfterPhase : int = -1;
 
     // Uninitialized variable
     #pragma warning disable 649
@@ -547,7 +549,7 @@ namespace Nemerle.Compiler
           def e4 = if (skip_n_return) e3
                    else TExpr.Block (current_fun.ReturnType, local, e3);
 
-          current_fun.body = FunBody.Typed (e4); // TODO: VladD2: В режиме интеграции здесь нужно обновлять своства TypedObject
+          current_fun.body = FunBody.Typed(e4); // TODO: VladD2: В режиме интеграции здесь нужно обновлять своства TypedObject
 
         | FunBody.Abstract => ()
 
@@ -575,9 +577,15 @@ namespace Nemerle.Compiler
         RunDelayedTypings();
       }
       
+      when (StopAfterPhase > 0 && StopAfterPhase == 1)
+        return;
+      
       def t2 = Typer2 (current_type, meth, this);
       t2.Run ();
 
+      when (StopAfterPhase > 0 && StopAfterPhase == 2)
+        return;
+      
       def t3 = Typer3 (meth, this, t2);
       t3.Run ();
     }
@@ -2011,32 +2019,55 @@ namespace Nemerle.Compiler
 
 
         | PExpr.Typeof (t) =>
+          def buildTExrp(loc, fixedType)
+          {
+            def verifyAndBuildType(fixedType, top)
+            {
+              def isOpen(t) { t.IsFresh || (t is FixedType.StaticTypeVarRef && null == t.ParsedObject) }
+              match(fixedType)
+              {
+                | FixedType.Array(et, _)  =>
+                  if(et.IsFresh)
+                    Message.Error(loc, "the non-generic type `System.Array' cannot be used with type arguments");
+                  else 
+                    _ = verifyAndBuildType(et, false);
+                  fixedType
+                | FixedType.Tuple (args) 
+                  with ctor = InternalType.GetTupleType (args.Length).TyCon
+                | FixedType.Fun(from, to) as f 
+                  with (ctor = InternalType.GetFunctionType(f.argsCount).TyCon, args = [from, to])
+                | FixedType.Class(ctor, args) =>
+                  match(args.Exists(_.IsFresh), args.ForAll(isOpen), top)
+                  {
+                    | (true, true, true) => 
+                      FixedType.Class (ctor, [])
+                    | (true, false, true) => 
+                      Message.Error(loc, "to create open generic type, all arguments must be open `_'"); 
+                      fixedType
+                    | (true, _, false) => 
+                      Message.Error(loc, "unexpected use of unbound generic name"); 
+                      fixedType
+                    | (false, _, _) => 
+                      foreach (arg is FixedType in args)
+                        _ = verifyAndBuildType(arg, false); 
+                      fixedType
+                  }
+                | _ => fixedType
+              }
+            }
+            verifyAndBuildType(fixedType, true) |> TExpr.TypeOf
+          }
           _ = ExpectSubtyping(expected, InternalType.Type, "typeof result");
           def ty = tenv.Bind (env, current_type, t, allow_tyvars = true, check_parms  = false);
           if (ty.IsFixed)
-            match (ty.FixedValue)
-            {
-              | FixedType.Tuple (args) with tc = InternalType.GetTupleType (args.Length).TyCon
-              | FixedType.Class (tc, args) =>
-                if (args.Exists(_.IsFresh))
-                {
-                  def isOpen(t) { t.IsFresh || (t is FixedType.StaticTypeVarRef && null == t.ParsedObject) }
-
-                  when (!args.ForAll(isOpen))
-                    ReportLocatedError(t.Location, messenger, "to create open generic type, all arguments must be open `_'");
-
-                  TExpr.TypeOf(FixedType.Class (tc, []))
-                }
-                else TExpr.TypeOf (ty)
-              | _ => TExpr.TypeOf (ty)
-            }
+            buildTExrp(t.Location, ty.FixedValue)
           else
           {
             DelayAction(expression, expected,
               Typer.DelayedLambdaAction(failLoudly =>
                 match (ty.Hint)
                 {
-                  | Some(t) => Some(TExpr.TypeOf(t.Fix()))
+                  | Some(t) => buildTExrp(t.Location, t.Fix()) |> Some
                   | None =>
                     when (failLoudly)
                       Message.Error ($"cannot deduce type of '$ty' in '$expression' expression");

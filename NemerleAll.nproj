@@ -28,8 +28,8 @@
     <NRootBoot Condition="'$(TargetFrameworkVersion)' == '' Or '$(TargetFrameworkVersion)' == 'v2.0' Or '$(TargetFrameworkVersion)' == 'v3.0' Or '$(TargetFrameworkVersion)' == 'v3.5'">$(NRoot)\boot\</NRootBoot>
     <NRootBoot Condition="'$(TargetFrameworkVersion)' == 'v4.0' Or '$(TargetFrameworkVersion)' == 'v4.5' Or '$(TargetFrameworkVersion)' == 'v4.5.1'">$(NRoot)\boot-4.0\</NRootBoot>
     <!--Path to stages output directory (including current configuration subfolder).-->
-    <NBin>$(NRoot)\bin\$(Configuration)\$(NVer)\</NBin>
-    <NObj>$(NRoot)\obj\$(Configuration)\$(NVer)\</NObj>
+    <NBin>$(NRoot)\bin\$(Configuration)\$(NVer)</NBin>
+    <NObj>$(NRoot)\obj\$(Configuration)\$(NVer)</NObj>
     <!--Path to boot compiler.-->
     <NBoot>$(NBin)\boot\</NBoot>
     <!-- Project Constants -->
@@ -191,6 +191,7 @@
       <NGen Condition="'$(TargetFrameworkVersion)' == 'v4.0' Or '$(TargetFrameworkVersion)' == 'v4.5' Or '$(TargetFrameworkVersion)' == 'v4.5.1'">"$(FW40)\ngen.exe"</NGen>
       <MSBuild>$(MSBuildBinPath)\msbuild.exe</MSBuild>
       <Junction>$(NRoot)\ExternalDependences\junction.exe</Junction>
+      <Nuget>$(NRoot)\ExternalDependences\NuGet.exe</Nuget>
     </PropertyGroup>
     <PropertyGroup Condition="'$(UseMSBuild)' == ''">
       <SDKToolsBin>$(SDK)\..\..\..\bin</SDKToolsBin>
@@ -254,8 +255,8 @@
   <Target Name="Stage1" DependsOnTargets="NPrepareKeys;NPrepareBoot;NTasks">
     <PropertyGroup>
       <NPrevBin>$(NBoot)</NPrevBin>
-      <NCurBin>$(NBin)\Stage1\</NCurBin>
-      <NCurObj>$(NObj)\Stage1\</NCurObj>
+      <NCurBin>$(NBin)\Stage1</NCurBin>
+      <NCurObj>$(NObj)\Stage1</NCurObj>
     </PropertyGroup>
     <MSBuild Projects="@(NCompilerProject)" Properties="OutputPath=$(NCurBin); IntermediateOutputPath=$(NCurObj)\; $(NDefineProjectConstants); Nemerle=$(NPrevBin); NKeysDir=$(NBin)\keys; SDKBin=$(SDKBin)" Targets="$(NTargetName)" />
     <Copy SourceFiles="@(NTasksFiles)" DestinationFolder="$(NCurBin)" />
@@ -263,9 +264,9 @@
   <!--Builds compiler using Stage1-->
   <Target Name="Stage2" DependsOnTargets="Stage1">
     <PropertyGroup>
-      <NPrevBin>$(NBin)\Stage1\</NPrevBin>
-      <NCurBin>$(NBin)\Stage2\</NCurBin>
-      <NCurObj>$(NObj)\Stage2\</NCurObj>
+      <NPrevBin>$(NBin)\Stage1</NPrevBin>
+      <NCurBin>$(NBin)\Stage2</NCurBin>
+      <NCurObj>$(NObj)\Stage2</NCurObj>
     </PropertyGroup>
     <MSBuild Projects="@(NCompilerProject)" Properties="OutputPath=$(NCurBin); IntermediateOutputPath=$(NCurObj)\; $(NDefineProjectConstants); Nemerle=$(NPrevBin); NKeysDir=$(NBin)\keys; SDKBin=$(SDKBin)" Targets="$(NTargetName)" />
     <Copy SourceFiles="@(NTasksFiles)" DestinationFolder="$(NCurBin)" />
@@ -273,9 +274,9 @@
   <!--Builds compiler using Stage2-->
   <Target Name="Stage3" DependsOnTargets="Stage2">
     <PropertyGroup>
-      <NPrevBin>$(NBin)\Stage2\</NPrevBin>
-      <NCurBin>$(NBin)\Stage3\</NCurBin>
-      <NCurObj>$(NObj)\Stage3\</NCurObj>
+      <NPrevBin>$(NBin)\Stage2</NPrevBin>
+      <NCurBin>$(NBin)\Stage3</NCurBin>
+      <NCurObj>$(NObj)\Stage3</NCurObj>
     </PropertyGroup>
     <MSBuild Projects="@(NCompilerProject)" Properties="OutputPath=$(NCurBin); IntermediateOutputPath=$(NCurObj)\; $(NDefineProjectConstants); Nemerle=$(NPrevBin); NKeysDir=$(NBin)\keys; SDKBin=$(SDKBin)" Targets="$(NTargetName)" />
     <Copy SourceFiles="@(NTasksFiles)" DestinationFolder="$(NCurBin)" />
@@ -283,9 +284,9 @@
   <!--Builds compiler using Stage3-->
   <Target Name="Stage4" DependsOnTargets="Stage3">
     <PropertyGroup>
-      <NPrevBin>$(NBin)\Stage3\</NPrevBin>
-      <NCurBin>$(NBin)\Stage4\</NCurBin>
-      <NCurObj>$(NObj)\Stage4\</NCurObj>
+      <NPrevBin>$(NBin)\Stage3</NPrevBin>
+      <NCurBin>$(NBin)\Stage4</NCurBin>
+      <NCurObj>$(NObj)\Stage4</NCurObj>
     </PropertyGroup>
     <MSBuild Projects="@(NCompilerProject)" Properties="OutputPath=$(NCurBin); IntermediateOutputPath=$(NCurObj)\; $(NDefineProjectConstants); Nemerle=$(NPrevBin); NKeysDir=$(NBin)\keys; SDKBin=$(SDKBin)" Targets="$(NTargetName)" />
     <Copy SourceFiles="@(NTasksFiles)" DestinationFolder="$(NCurBin)" />
@@ -301,10 +302,10 @@
   <Target Name="IntegrationFull" DependsOnTargets="Stage4; Validate; CompilerTests; _Integration; IdeEngineTests" />
 
   <!--Builds MSI package. Only Stage1 compiler required.-->
-  <Target Name="InstallerFast" DependsOnTargets="IntegrationFast; _PowerPack; _Installer;" />
+  <Target Name="InstallerFast" DependsOnTargets="IntegrationFast; _PowerPack; _NugetPack; _Installer;" />
 
   <!--Builds MSI package. Stage4 compiler required.-->
-  <Target Name="InstallerFull" DependsOnTargets="IntegrationFull; _PowerPack; _Installer;"  />
+  <Target Name="InstallerFull" DependsOnTargets="IntegrationFull; _PowerPack; _NugetPack; _Installer;"  />
 
   <!--Compare last two stages on IL level-->
   <Target Name="Validate" DependsOnTargets="InitTools">
@@ -401,6 +402,7 @@
       <FilesToCopyToNInstall Include="$(NBin)\Unsafe\*.*" Exclude="@(_FilesToCopyToNInstallExculde->'$(NBin)\Unsafe\%(Filename)%(Extension)')" />
       <FilesToCopyToNInstall Include="$(NBin)\TestFramework\*.*" Exclude="@(_FilesToCopyToNInstallExculde->'$(NBin)\TestFramework\%(Filename)%(Extension)')" />
       <FilesToCopyToNInstall Include="$(NBin)\PowerPack\*.*" Exclude="@(_FilesToCopyToNInstallExculde->'$(NBin)\PowerPack\%(Filename)%(Extension)')" />
+      <FilesToCopyToNInstall Include="$(NBin)\Nuget\*.*" />
       <FilesToCopyToNInstall Include="$(NBin)\VsIntegration\*.*" />
       <FilesToCopyToNInstall Include="$(NCurBin)\*.*" />
     </ItemGroup>
@@ -452,15 +454,8 @@
     <!--<Exec Command="$(ExeRunner)&quot;$(NBin)\PowerPack\ComputationExpressions.Tests.exe&quot;" />-->
   </Target>
   
-  <!--Helper target to copy async targeting pack -->
-  <Target Name="_AsyncTargetingPack" Condition="'$(TargetFrameworkVersion)' == 'v4.0'">
-    <Copy SourceFiles="$(NRoot)\snippets\Nemerle.Async\AsyncTargetingPack.NET4\Microsoft.CompilerServices.AsyncTargetingPack.Net4.dll" DestinationFolder="$(NBin)\PowerPack\" />
-    <Copy SourceFiles="$(NRoot)\snippets\Nemerle.Async\AsyncTargetingPack.NET4\Microsoft.CompilerServices.AsyncTargetingPack.Net4.xml" DestinationFolder="$(NBin)\PowerPack\" />
-    <Copy SourceFiles="$(NRoot)\snippets\Nemerle.Async\AsyncTargetingPack.NET4\AsyncTargetingPack-EULA.html" DestinationFolder="$(NBin)\PowerPack\" />    
-  </Target>
-  
   <!--Helper target to build Nemerle.Async and test it -->
-  <Target Name="_Async" DependsOnTargets="_AsyncTargetingPack" Condition="'$(TargetFrameworkVersion)' == 'v4.0' Or '$(TargetFrameworkVersion)' == 'v4.5' Or '$(TargetFrameworkVersion)' == 'v4.5.1'">
+  <Target Name="_Async" Condition="'$(TargetFrameworkVersion)' == 'v4.0' Or '$(TargetFrameworkVersion)' == 'v4.5' Or '$(TargetFrameworkVersion)' == 'v4.5.1'">
     <MSBuild Projects="@(NAsync)" Properties="OutputPath=$(NBin)\PowerPack\; IntermediateOutputPath=$(NObj)\PowerPack\; Nemerle=$(NCurBin); Configuration=$(Configuration); NKeysDir=$(NBin)\keys" Targets="$(NTargetName)" />
   </Target>
   
@@ -512,13 +507,30 @@
   <Target Name="_PowerPack" DependsOnTargets="_PegAndCSharp; Unsafe; TestFramework; _ComputationExpressions; _Async; _Statechart; _Wpf">
     <MSBuild Projects="@(NPowerPack)" Properties="OutputPath=$(NBin)\PowerPack\; IntermediateOutputPath=$(NObj)\PowerPack\; Nemerle=$(NCurBin); Configuration=$(Configuration); NKeysDir=$(NBin)\keys" Targets="$(NTargetName)" />
   </Target>
+  
+  <Target Name="_NugetPack" Condition=" '$(TargetFrameworkVersion)' == 'v4.0' Or '$(TargetFrameworkVersion)' == 'v4.5' Or '$(TargetFrameworkVersion)' == 'v4.5.1' " DependsOnTargets="_PegAndCSharp; TestFramework">
+    <GetAssemblyIdentity AssemblyFiles="$(NCurBin)\Nemerle.dll">
+      <Output TaskParameter="Assemblies" ItemName="NemerleRuntimeIdentity" />
+    </GetAssemblyIdentity>
+    
+    <PropertyGroup>
+      <NemerleProductVersion>$([System.Text.RegularExpressions.Regex]::Replace('%(NemerleRuntimeIdentity.Version)', '(?&lt;major&gt;\d+)\.(?&lt;minor&gt;\d+)\.0\.(?&lt;build&gt;\d+)', '${major}.${minor}.${build}.0'))</NemerleProductVersion>
+      <NugetOutput>$(NBin)\Nuget</NugetOutput>
+      <NugetProperties>NBin=$(NBin);NCurBin=$(NCurBin);version=$(NemerleProductVersion)</NugetProperties>
+    </PropertyGroup>
+    
+    <RemoveDir Directories="$(NugetOutput)" />
+    <MakeDir Directories="$(NugetOutput)" />
+    <Exec Command="$(Nuget) pack Nemerle.nuspec          -OutputDirectory &quot;$(NugetOutput)&quot; -Properties &quot;$(NugetProperties)&quot;" WorkingDirectory="$(NRoot)" />
+    <Exec Command="$(Nuget) pack Nemerle.Compiler.nuspec -OutputDirectory &quot;$(NugetOutput)&quot; -Properties &quot;$(NugetProperties)&quot;" WorkingDirectory="$(NRoot)" />
+  </Target>
 
-  <Target Name="DevBuildQuickNccOnly"    DependsOnTargets="Stage1;                                                                                   Install" />
-  <Target Name="DevBuildQuick"           DependsOnTargets="Stage1;                          _PegAndCSharp; _Integration;                             Install" />
-  <Target Name="DevBuildQuickWithTests"  DependsOnTargets="Stage1;           CompilerTests;                _Integration; IdeEngineTests;             Install" />
-  <Target Name="DevBuild2Stage"          DependsOnTargets="Stage2;                                         _Integration;                             Install" />
-  <Target Name="DevBuild2StageWithTests" DependsOnTargets="Stage2;           CompilerTests;                _Integration; IdeEngineTests;             Install" />
-  <Target Name="DevBuildFull"            DependsOnTargets="Stage4; Validate; CompilerTests;                _Integration; IdeEngineTests; _PowerPack; Install" />
+  <Target Name="DevBuildQuickNccOnly"    DependsOnTargets="Stage1;                                                                                Install" />
+  <Target Name="DevBuildQuick"           DependsOnTargets="Stage1;                          _NugetPack; _Integration;                             Install" />
+  <Target Name="DevBuildQuickWithTests"  DependsOnTargets="Stage1;           CompilerTests; _NugetPack; _Integration; IdeEngineTests;             Install" />
+  <Target Name="DevBuild2Stage"          DependsOnTargets="Stage2;                          _NugetPack; _Integration;                             Install" />
+  <Target Name="DevBuild2StageWithTests" DependsOnTargets="Stage2;           CompilerTests; _NugetPack; _Integration; IdeEngineTests;             Install" />
+  <Target Name="DevBuildFull"            DependsOnTargets="Stage4; Validate; CompilerTests; _NugetPack; _Integration; IdeEngineTests; _PowerPack; Install" />
 
   <!--Helper target to build installer.-->
   <Target Name="_Installer" Condition="'$(UseMSBuild)' != ''">

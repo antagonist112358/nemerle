@@ -77,8 +77,10 @@ namespace Nemerle.Compiler
 
     static MS_NET_RUNTIME_TYPE : System.Type = typeof (object).Assembly.GetType ("System.RuntimeType");
     static MONO_RUNTIME_TYPE   : System.Type = typeof (object).Assembly.GetType ("System.MonoType");
-    static RUNTIME_TYPE        : System.Type = MS_NET_RUNTIME_TYPE ?? MONO_RUNTIME_TYPE;
+    static RUNTIME_TYPE        : System.Type = MONO_RUNTIME_TYPE ?? MS_NET_RUNTIME_TYPE;
 
+    static IsRunningOnMono : bool = typeof (object).Assembly.GetType ("Mono.Runtime") != null;
+    
     /**
      * Creates and executes a code generator for a method
      */
@@ -323,7 +325,7 @@ namespace Nemerle.Compiler
     static FrameworkGetField (t : System.Type, mutable m : FieldInfo) : FieldInfo
     {
       // use hack only on .NET
-      if (MS_NET_RUNTIME_TYPE != null)
+      if (!IsRunningOnMono)
         if(t.GetType().Equals (MS_NET_RUNTIME_TYPE))
           GetHackishField (t, m);
         else {
@@ -913,6 +915,9 @@ namespace Nemerle.Compiler
           if (type_of_expr.IsValueType) {
             /* perform conversion of value types */
             emit_value_type_conversion (expr.Location, val.FixedType(), cast_to_type.Fix (), is_checked)
+          }
+          else if (SystemTypeCache.Object : object == type_of_expr && cast_to_stype.IsValueType) {
+          	_ilg.Emit (OpCodes.Unbox_Any, cast_to_stype)
           }
           else if (is_generic || 
                    SystemTypeCache.Object : object == type_of_expr || 

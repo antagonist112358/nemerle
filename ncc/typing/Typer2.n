@@ -28,6 +28,7 @@
 
 using Nemerle.Collections;
 using Nemerle.Utility;
+using Nemerle.Surround;
 
 using Nemerle.Compiler;
 using PT = Nemerle.Compiler.Parsetree;
@@ -196,14 +197,11 @@ namespace Nemerle.Compiler
       {
         def Manager = typarms.Head.Manager;
         def is_ok =
-          try
+          surroundwith(speculatitveTyping)
           {
-            Manager.Solver.PushState();
             NList.ForAll2(meth.GetHeader().TypeParameters, typarms,
              (st, tv) => tv.Unify(FixedType.StaticTypeVarRef(st)))
-          }
-          finally
-            Manager.Solver.PopState();
+          };
 
         if (is_ok)
         {
@@ -689,10 +687,7 @@ namespace Nemerle.Compiler
 
     IgnoreExpr(expr : TExpr) : TExpr
     {
-      def solver = Manager.Solver;
-      solver.PushState();
-      def ok = expr.Type.Unify(InternalType.Void);
-      solver.PopState();
+      def ok = surroundwith(speculatitveTyping) expr.Type.Unify(InternalType.Void);
       if (ok)
       {
         def res = expr.Type.Unify(InternalType.Void);
@@ -1058,7 +1053,7 @@ namespace Nemerle.Compiler
             {
               | TExpr.This => (prop.DeclaringType, true)
               | TExpr.Base with isFromThis = true
-              | _          with isFromThis = false => (objType.Fix().TypeInfo, isFromThis)
+              | _          with isFromThis = false => (objType.Fix().TypeInfo ?? meth.DeclaringType, isFromThis)
             };
 
             unless (meth.CanAccess(memberTypeInfo, current_type, isFromThis))
@@ -1372,11 +1367,15 @@ namespace Nemerle.Compiler
                 {
                   | TExpr.PropertyMember
                   | TExpr.StaticPropertyRef
-                  | TExpr.Call
-                  | TExpr.DebugInfo(TExpr.PropertyMember, _)
-                  | TExpr.DebugInfo(TExpr.StaticPropertyRef, _)
-                  | TExpr.DebugInfo(TExpr.Call, _)
-                      => true
+                  | TExpr.Call => true
+                  | TExpr.DebugInfo(e, _) =>
+                    match (Unfold(e))
+                    {
+                      | TExpr.PropertyMember
+                      | TExpr.StaticPropertyRef
+                      | TExpr.Call => true
+                      | _ => false
+                    }
                   | _ => false
                 };
 

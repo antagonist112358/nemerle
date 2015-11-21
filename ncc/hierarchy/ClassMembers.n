@@ -31,6 +31,7 @@ using System.Diagnostics;
 using Nemerle.Assertions;
 using Nemerle.Collections;
 using Nemerle.Compiler.Typedtree;
+using Nemerle.Imperative;
 using Nemerle.Utility;
 
 using SCG = System.Collections.Generic;
@@ -876,12 +877,9 @@ public partial class MethodBuilder : MemberBuilder, IMethod
 
   public ImplementedMethods : list[FixedType.Class * IMethod] { get; internal set; }
 
-  public IsExtension : bool
-  {
-    mutable is_extension : bool;
-    public   get { is_extension }
-    internal set { is_extension = value }
-  }
+  public SkipEmiting : bool { get; set; }
+  
+  public IsExtension : bool { get; internal set; }
 
   public override IsConstructor : bool
   {
@@ -954,32 +952,38 @@ public partial class MethodBuilder : MemberBuilder, IMethod
 
   public RunBodyTyper() : void
   {
+      when (SkipEmiting)
+        return;
+
+    def oldSolver = Manager.Solver;
+    ManagerClass.Instance = Manager;
     try
     {
-      def oldSolver = Manager.Solver;
-      ManagerClass.Instance = Manager;
-      try
-      {
-        when (Manager.IsIntelliSenseMode)
-          Manager.SetSolver(Solver(Manager));
+      when (Manager.IsIntelliSenseMode)
+        Manager.SetSolver(Solver(Manager));
 
-        match (fun_header.body)
-        {
-          | FunBody.Parsed =>
-            def typer =  Manager.ComponentsFactory.CreateTyper (this);
+      match (fun_header.body)
+      {
+        | FunBody.Parsed =>
+          def typer =  Manager.ComponentsFactory.CreateTyper (this);
           
-            // Subscribe to events in typer and forward them to the declaring type.
-            typer.BeforeStage2 += (s, e) => declaring_type.OnMethodBeforeStage2(s, e);
-            typer.BeforeStage3 += (s, e) => declaring_type.OnMethodBeforeStage3(s, e);
-            typer.BeforeStage4 += (s, e) => declaring_type.OnMethodBeforeStage4(s, e);     
-          
-            typer.RunFullTyping ();
-          | _ => ()
-        }
+          // Subscribe to events in typer and forward them to the declaring type.
+          typer.BeforeStage2 += (s, e) => declaring_type.OnMethodBeforeStage2(s, e);
+          typer.BeforeStage3 += (s, e) => declaring_type.OnMethodBeforeStage3(s, e);
+          typer.BeforeStage4 += (s, e) => declaring_type.OnMethodBeforeStage4(s, e);     
+
+          def loop()
+          {
+            try
+              typer.RunFullTyping();
+            catch { _ is RestartRunBodyTyperException => loop(); }
+          }
+          loop();
+
+        | _ => ()
       }
-      finally { Manager.SetSolver(oldSolver); }
     }
-    catch { _ is RestartRunBodyTyperException => RunBodyTyper(); }
+    finally { Manager.SetSolver(oldSolver); }
   }
 
   public override MemberKind : MemberKinds {
@@ -1246,6 +1250,30 @@ public partial class MethodBuilder : MemberBuilder, IMethod
       Manager.MarkAsUsed (this);
 
     _isConditional = modifiers.FindAttribute(InternalType.Conditional_tc, par.GlobalEnv).IsSome;
+
+    when (functionAst.IsExtension)
+    {
+      def systemExtensionAttribute = Manager.CoreEnv.LookupType(["System", "Runtime", "CompilerServices", "ExtensionAttribute"]);
+      def addExtensionAttributes(m)
+      {
+        unless (modifiers.FindAttribute(InternalType.ExtensionAttribute_tc, par.GlobalEnv).IsSome)
+          m.AddCustomAttribute(PT.PExpr.FromQualifiedIdentifier(Manager, InternalType.ExtensionAttribute_tc.FullName));
+
+        when (systemExtensionAttribute is Some(ti))
+          m.AddCustomAttribute(PT.PExpr.FromQualifiedIdentifier(Manager, ti.FullName));
+      }
+      
+      def flags = modifiers.mods;
+      if (!(((flags %&& NemerleModifiers.Public || flags %&& NemerleModifiers.Internal || flags %&& NemerleModifiers.Private))
+         && (flags %&& NemerleModifiers.Static)))
+        Message.Error(functionAst.header.Location, "Extension methods need to be marked static and should not be protected.")
+      else
+      {
+        addExtensionAttributes(par.GetModifiers());
+        addExtensionAttributes(modifiers);
+        Manager.LibrariesManager.AddExtensionMethod(this);
+      }
+    }
   }
 
   internal override OnAddMemberComplete(_isIgnored : bool) : void
@@ -1431,11 +1459,6 @@ public partial class MethodBuilder : MemberBuilder, IMethod
       check_for_invalid_attr(NemerleModifiers.Sealed, "sealed");
       check_for_invalid_attr(NemerleModifiers.Override, "override");
     }
-  }
-
-  public AddAsExtensionMethod () : void
-  {
-    Manager.LibrariesManager.AddExtensionMethod (this);
   }
 
   public BuiltinKind : BuiltinMethodKind

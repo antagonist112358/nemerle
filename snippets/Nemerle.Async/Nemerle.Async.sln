@@ -1,6 +1,8 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{EDCC3B85-0BAD-11DB-BC1A-00112FDE8B61}") = "Nemerle.Async", "Nemerle.Async\Nemerle.Async.nproj", "{C8F385DE-75A2-4A06-BA0F-003FEBE51C6C}"
 EndProject
 Project("{EDCC3B85-0BAD-11DB-BC1A-00112FDE8B61}") = "Nemerle.Async.Macros", "Nemerle.Async.Macros\Nemerle.Async.Macros.nproj", "{4FBD0FE5-66C2-4E63-A5F7-57118D75D444}"
